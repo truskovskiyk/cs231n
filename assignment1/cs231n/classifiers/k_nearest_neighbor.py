@@ -74,6 +74,7 @@ class KNearestNeighbor(object):
         pass
         #####################################################################
         #                       END OF YOUR CODE                            #
+        dists[i, j] = ((X[i, :] - self.X_train[j, :]) ** 2).sum() ** 0.5
         #####################################################################
     return dists
 
@@ -96,6 +97,7 @@ class KNearestNeighbor(object):
       pass
       #######################################################################
       #                         END OF YOUR CODE                            #
+      dists[i] = np.sqrt(np.sum(np.square(self.X_train - X[i, :]), axis=1))
       #######################################################################
     return dists
 
@@ -125,6 +127,11 @@ class KNearestNeighbor(object):
     #########################################################################
     #                         END OF YOUR CODE                              #
     #########################################################################
+    test_square = np.array([np.sum(np.square(X), axis=1)] * num_train).T
+    train_square = np.array([np.sum(np.square(self.X_train), axis=1)] *
+                            num_test)
+    dists = np.sqrt(X.dot(self.X_train.transpose()) * (-2) + test_square +
+                    train_square)
     return dists
 
   def predict_labels(self, dists, k=1):
@@ -163,7 +170,11 @@ class KNearestNeighbor(object):
       #########################################################################
       pass
       #########################################################################
-      #                           END OF YOUR CODE                            # 
+      #                           END OF YOUR CODE                            #
+      distanses = dists[i, :]
+      closest_y = self.y_train[np.argpartition(distanses, k)][:k]
+      counts = np.bincount(closest_y)
+      y_pred[i] = np.argmax(counts)
       #########################################################################
 
     return y_pred

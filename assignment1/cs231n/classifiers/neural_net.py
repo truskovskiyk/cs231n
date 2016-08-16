@@ -1,6 +1,20 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+def relu(x):
+  return np.maximum(x, 0)
+
+def softmax(x):
+  return np.exp(x) / np.exp(x).sum(axis=1, keepdims=True)
+
+
+def _to_cat(y, shape):
+  y_extend = np.zeros(shape)
+  y_extend[np.arange(y_extend.shape[0]), y] = 1
+  return y_extend
+
+def cross_entropy(predicted, target):
+  return -(target * np.log(predicted)).sum(axis=1)
 
 class TwoLayerNet(object):
   """
@@ -38,6 +52,12 @@ class TwoLayerNet(object):
     self.params['b1'] = np.zeros(hidden_size)
     self.params['W2'] = std * np.random.randn(hidden_size, output_size)
     self.params['b2'] = np.zeros(output_size)
+
+  def feat(self, X):
+    W1, b1 = self.params['W1'], self.params['b1']
+    z1 = X.dot(W1) + b1
+    a1 = relu(z1)
+    return a1
 
   def loss(self, X, y=None, reg=0.0):
     """
@@ -78,10 +98,12 @@ class TwoLayerNet(object):
     #############################################################################
     #                              END OF YOUR CODE                             #
     #############################################################################
-    
+    z1 = X.dot(W1) + b1
+    a1 = relu(z1)
+    z2 = a1.dot(W2) + b2
     # If the targets are not given then jump out, we're done
     if y is None:
-      return scores
+      return z2
 
     # Compute the loss
     loss = None
@@ -96,7 +118,11 @@ class TwoLayerNet(object):
     #############################################################################
     #                              END OF YOUR CODE                             #
     #############################################################################
+    y_pred = softmax(z2)
+    y_prob = _to_cat(y, y_pred.shape)
 
+    loss = cross_entropy(y_pred, y_prob).mean()
+    loss += 0.5 * reg * (np.sum(W1 ** 2) + np.sum(W2 ** 2))
     # Backward pass: compute gradients
     grads = {}
     #############################################################################
@@ -108,6 +134,27 @@ class TwoLayerNet(object):
     #############################################################################
     #                              END OF YOUR CODE                             #
     #############################################################################
+
+
+    delta3 = (y_pred - y_prob) / N
+    dW2 = (a1.T).dot(delta3)
+    db2 = delta3.sum(axis=0, keepdims=True)
+
+
+    delta2 = (z1 > 0) * delta3.dot(W2.T)
+    dW1 = (X.T).dot(delta2)
+    db1 = delta2.sum(axis=0, keepdims=True)
+
+
+    dW2 += reg * W2
+    db2 += reg * b2
+    dW1 += reg * W1
+    db1 += reg * b1
+
+    grads['W2'] = dW2
+    grads['b2'] = db2
+    grads['W1'] = dW1
+    grads['b1'] = db1
 
     return loss, grads
 
@@ -153,6 +200,10 @@ class TwoLayerNet(object):
       #                             END OF YOUR CODE                          #
       #########################################################################
 
+      index = np.random.choice(np.arange(num_train), size=batch_size)
+      X_batch = X[index]
+      y_batch = y[index]
+
       # Compute loss and gradients using the current minibatch
       loss, grads = self.loss(X_batch, y=y_batch, reg=reg)
       loss_history.append(loss)
@@ -167,6 +218,24 @@ class TwoLayerNet(object):
       #########################################################################
       #                             END OF YOUR CODE                          #
       #########################################################################
+      W1, b1 = self.params['W1'], self.params['b1']
+      W2, b2 = self.params['W2'], self.params['b2']
+
+      dW1 = grads['W1']
+      db1 = grads['b1'].flatten()
+      dW2 = grads['W2']
+      db2 = grads['b2'].flatten()
+
+      W1 += - learning_rate * dW1
+      b1 += - learning_rate * db1
+
+      W2 += - learning_rate * dW2
+      b2 += - learning_rate * db2
+
+      self.params['W1'] = W1
+      self.params['b1'] = b1
+      self.params['W2'] = W2
+      self.params['b2'] = b2
 
       if verbose and it % 100 == 0:
         print 'iteration %d / %d: loss %f' % (it, num_iters, loss)
@@ -212,7 +281,16 @@ class TwoLayerNet(object):
     ###########################################################################
     #                              END OF YOUR CODE                           #
     ###########################################################################
+    W1 = self.params['W1']
+    b1 = self.params['b1']
+    W2 = self.params['W2']
+    b2 = self.params['b2']
 
+    z1 = X.dot(W1) + b1
+    a1 = relu(z1)
+    z2 = a1.dot(W2) + b2
+    y_pred = softmax(z2)
+    y_pred = np.argmax(y_pred, axis=1)
     return y_pred
 
 
