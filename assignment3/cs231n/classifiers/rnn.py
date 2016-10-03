@@ -94,6 +94,7 @@ class CaptioningRNN(object):
     # by one relative to each other because the RNN should produce word (t+1)
     # after receiving word t. The first element of captions_in will be the START
     # token, and the first element of captions_out will be the first word.
+
     captions_in = captions[:, :-1]
     captions_out = captions[:, 1:]
     
@@ -112,8 +113,40 @@ class CaptioningRNN(object):
 
     # Weight and bias for the hidden-to-vocab transformation.
     W_vocab, b_vocab = self.params['W_vocab'], self.params['b_vocab']
-    
+
+    if self.cell_type == 'rnn':
+      r_net_forward = rnn_forward
+      r_net_backward = rnn_backward
+    else:
+      r_net_forward = lstm_forward
+      r_net_backward = lstm_backward
+
     loss, grads = 0.0, {}
+
+    h0, h0_cache = affine_forward(features, W_proj, b_proj)
+    x, x_cache = word_embedding_forward(captions_in, W_embed)
+    h, h_cache = r_net_forward(x, h0, Wx, Wh, b)
+    out, out_cache = temporal_affine_forward(h, W_vocab, b_vocab)
+
+    loss, dout = temporal_softmax_loss(out, captions_out, mask)
+
+    dh, dW_vocab, db_vocab = temporal_affine_backward(dout, out_cache)
+    dx, dh0, dWx, dWh, db = r_net_backward(dh, h_cache)
+    dW_embed = word_embedding_backward(dx, x_cache)
+    dh0, dW_proj, db_proj = affine_backward(dh0, h0_cache)
+
+    grads['W_proj'] = dW_proj
+    grads['b_proj'] = db_proj
+
+    grads['W_embed'] = dW_embed
+
+    grads['Wx'] = dWx
+    grads['Wh'] = dWh
+    grads['b'] = db.flatten()
+
+    grads['W_vocab'] = dW_vocab
+    grads['b_vocab'] = db_vocab
+
     ############################################################################
     # TODO: Implement the forward and backward passes for the CaptioningRNN.   #
     # In the forward pass you will need to do the following:                   #
@@ -134,12 +167,6 @@ class CaptioningRNN(object):
     # with respect to all model parameters. Use the loss and grads variables   #
     # defined above to store loss and gradients; grads[k] should give the      #
     # gradients for self.params[k].                                            #
-    ############################################################################
-    pass
-    ############################################################################
-    #                             END OF YOUR CODE                             #
-    ############################################################################
-    
     return loss, grads
 
 
@@ -175,7 +202,21 @@ class CaptioningRNN(object):
     W_embed = self.params['W_embed']
     Wx, Wh, b = self.params['Wx'], self.params['Wh'], self.params['b']
     W_vocab, b_vocab = self.params['W_vocab'], self.params['b_vocab']
-    
+
+    h, _ = affine_forward(features, W_proj, b_proj)
+    c = np.zeros_like(h)
+
+    w = self._start
+    for i in range(max_length):
+      w_embedding, _ = word_embedding_forward(w, W_embed)
+      if self.cell_type == 'rnn':
+        h, _ = rnn_step_forward(w_embedding, h, Wx, Wh, b)
+      else:
+        h, c, _ = lstm_step_forward(w_embedding, h, c, Wx, Wh, b)
+      out, _ = affine_forward(h, W_vocab, b_vocab)
+      w = np.argmax(out, axis=1)
+      captions[:, i] = w
+
     ###########################################################################
     # TODO: Implement test-time sampling for the model. You will need to      #
     # initialize the hidden state of the RNN by applying the learned affine   #
@@ -196,9 +237,4 @@ class CaptioningRNN(object):
     # HINT: You will not be able to use the rnn_forward or lstm_forward       #
     # functions; you'll need to call rnn_step_forward or lstm_step_forward in #
     # a loop.                                                                 #
-    ###########################################################################
-    pass
-    ############################################################################
-    #                             END OF YOUR CODE                             #
-    ############################################################################
     return captions
